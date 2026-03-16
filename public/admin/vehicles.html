@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Vehicle Management — Admin — Fuel QR</title>
+  <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="nav-brand">
+      <span class="brand-badge">Thizzz Boy</span>
+    </div>
+    <div class="nav-links">
+      <a href="/admin/dashboard.html">Dashboard</a>
+      <a href="/admin/users.html">Users</a>
+      <a href="/admin/vehicles.html" class="active">Vehicles</a>
+      <a href="/admin/transactions.html">Transactions</a>
+      <a href="/admin/stations.html">Stations</a>
+      <button onclick="logout()">Logout</button>
+    </div>
+  </nav>
+
+  <main class="container">
+    <div class="page-header">
+      <h1>Vehicle Management</h1>
+      <p>View and manage all registered vehicles</p>
+    </div>
+
+    <div class="table-wrapper">
+      <div class="table-header">
+        <h3>All Vehicles</h3>
+      </div>
+      <div class="table-scroll">
+        <table>
+          <thead>
+            <tr>
+              <th>Vehicle Number</th>
+              <th>Owner Name</th>
+              <th>Fuel Type</th>
+              <th>Weekly Quota</th>
+              <th>Remaining Quota</th>
+              <th>QR Code</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody id="vehiclesBody">
+            <tr><td colspan="7" class="empty-state"><p>Loading...</p></td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </main>
+
+  <!-- Update Quota Modal -->
+  <div class="modal-overlay" id="quotaModal">
+    <div class="modal">
+      <div class="modal-header">
+        <h3>Update Weekly Quota</h3>
+        <button class="modal-close" onclick="closeModal('quotaModal')">✕</button>
+      </div>
+      <div class="modal-body">
+        <p style="color:var(--text-secondary);margin-bottom:16px;" id="quotaInfo"></p>
+        <div class="form-group">
+          <label for="newQuota">New Weekly Quota (Liters)</label>
+          <input type="number" id="newQuota" step="0.5" min="1" required>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" onclick="closeModal('quotaModal')">Cancel</button>
+        <button class="btn btn-primary" onclick="updateQuota()" id="updateQuotaBtn">Update</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- QR Modal -->
+  <div class="modal-overlay" id="qrModal">
+    <div class="modal">
+      <div class="modal-header">
+        <h3 id="qrTitle">QR Code</h3>
+        <button class="modal-close" onclick="closeModal('qrModal')">✕</button>
+      </div>
+      <div class="modal-body">
+        <div class="qr-container">
+          <img id="qrImage" src="" alt="QR Code">
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="/js/api.js"></script>
+  <script>
+    if (!getToken() || getUser()?.role !== 'admin') location.href = '/admin/login.html';
+    function logout() { clearAuth(); location.href = '/admin/login.html'; }
+
+    let editingVehicleId = null;
+
+    async function loadVehicles() {
+      try {
+        const vehicles = await apiFetch('/admin/vehicles');
+        const tbody = document.getElementById('vehiclesBody');
+        if (vehicles.length === 0) {
+          tbody.innerHTML = '<tr><td colspan="7" class="empty-state"><p>No vehicles registered</p></td></tr>';
+          return;
+        }
+        tbody.innerHTML = vehicles.map(v => `
+          <tr>
+            <td><strong>${v.vehicle_number}</strong></td>
+            <td>${v.owner_name}</td>
+            <td><span class="badge badge-blue">${capitalize(v.fuel_type)}</span></td>
+            <td>${v.weekly_quota}L</td>
+            <td>${v.remaining_quota}L</td>
+            <td>
+              ${v.qr_code ? `<button class="btn btn-outline btn-sm" onclick="viewQR('${v.vehicle_number}', '${v.qr_code.replace(/'/g, "\\'")}')">View</button>` : '-'}
+            </td>
+            <td>
+              <button class="btn btn-secondary btn-sm" onclick="showQuotaModal(${v.id}, '${v.vehicle_number}', ${v.weekly_quota})">Update Quota</button>
+              <button class="btn btn-danger btn-sm" onclick="deleteVehicle(${v.id})">Remove</button>
+            </td>
+          </tr>
+        `).join('');
+      } catch (err) { showToast(err.message, 'error'); }
+    }
+
+    function viewQR(number, qrData) {
+      document.getElementById('qrTitle').textContent = 'QR — ' + number;
+      document.getElementById('qrImage').src = qrData;
+      openModal('qrModal');
+    }
+
+    function showQuotaModal(id, number, currentQuota) {
+      editingVehicleId = id;
+      document.getElementById('quotaInfo').textContent = `Vehicle: ${number} — Current: ${currentQuota}L/week`;
+      document.getElementById('newQuota').value = currentQuota;
+      openModal('quotaModal');
+    }
+
+    async function updateQuota() {
+      const btn = document.getElementById('updateQuotaBtn');
+      btn.disabled = true;
+      try {
+        await apiFetch(`/admin/vehicles/${editingVehicleId}/quota`, {
+          method: 'PATCH',
+          body: JSON.stringify({ weekly_quota: parseFloat(document.getElementById('newQuota').value) })
+        });
+        closeModal('quotaModal');
+        showToast('Quota updated!');
+        loadVehicles();
+      } catch (err) { showToast(err.message, 'error'); }
+      finally { btn.disabled = false; }
+    }
+
+    async function deleteVehicle(id) {
+      if (!confirm('Delete this vehicle and all its transactions?')) return;
+      try {
+        await apiFetch(`/admin/vehicles/${id}`, { method: 'DELETE' });
+        showToast('Vehicle removed.');
+        loadVehicles();
+      } catch (err) { showToast(err.message, 'error'); }
+    }
+
+    loadVehicles();
+  </script>
+</body>
+</html>

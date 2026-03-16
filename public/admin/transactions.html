@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Transactions — Admin — Fuel QR</title>
+  <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="nav-brand">
+      <span class="brand-badge">Thizzz Boy</span>
+    </div>
+    <div class="nav-links">
+      <a href="/admin/dashboard.html">Dashboard</a>
+      <a href="/admin/users.html">Users</a>
+      <a href="/admin/vehicles.html">Vehicles</a>
+      <a href="/admin/transactions.html" class="active">Transactions</a>
+      <a href="/admin/stations.html">Stations</a>
+      <button onclick="logout()">Logout</button>
+    </div>
+  </nav>
+
+  <main class="container">
+    <div class="page-header">
+      <h1>Transaction Management</h1>
+      <p>View and manage all fuel transactions</p>
+    </div>
+
+    <div class="table-wrapper">
+      <div class="table-header">
+        <h3>All Fuel Transactions</h3>
+      </div>
+      <div class="table-scroll">
+        <table>
+          <thead>
+            <tr>
+              <th>Date</th>
+              <th>Vehicle Number</th>
+              <th>Owner Name</th>
+              <th>Fuel Amount</th>
+              <th>Station</th>
+              <th>Operator</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody id="txBody">
+            <tr><td colspan="7" class="empty-state"><p>Loading...</p></td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </main>
+
+  <script src="/js/api.js"></script>
+  <script>
+    if (!getToken() || getUser()?.role !== 'admin') location.href = '/admin/login.html';
+    function logout() { clearAuth(); location.href = '/admin/login.html'; }
+
+    async function loadTransactions() {
+      try {
+        const txs = await apiFetch('/admin/transactions');
+        const tbody = document.getElementById('txBody');
+        if (txs.length === 0) {
+          tbody.innerHTML = '<tr><td colspan="7" class="empty-state"><p>No transactions found</p></td></tr>';
+          return;
+        }
+        tbody.innerHTML = txs.map(tx => `
+          <tr>
+            <td>${formatDateTime(tx.created_at)}</td>
+            <td><strong>${tx.vehicle_number}</strong></td>
+            <td>${tx.owner_name}</td>
+            <td>${tx.fuel_amount}L</td>
+            <td>${tx.fuel_station || '-'}</td>
+            <td>${tx.operator_name || '-'}</td>
+            <td>
+              <button class="btn btn-danger btn-sm" onclick="deleteTx(${tx.id})">Delete</button>
+            </td>
+          </tr>
+        `).join('');
+      } catch (err) { showToast(err.message, 'error'); }
+    }
+
+    async function deleteTx(id) {
+      if (!confirm('Delete this transaction? The fuel quota will be restored.')) return;
+      try {
+        await apiFetch(`/admin/transactions/${id}`, { method: 'DELETE' });
+        showToast('Transaction deleted and quota restored.');
+        loadTransactions();
+      } catch (err) { showToast(err.message, 'error'); }
+    }
+
+    loadTransactions();
+  </script>
+</body>
+</html>

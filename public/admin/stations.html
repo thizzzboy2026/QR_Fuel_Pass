@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Fuel Stations — Admin — Fuel QR</title>
+  <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="nav-brand">
+      <span class="brand-badge">Thizzz Boy</span>
+    </div>
+    <div class="nav-links">
+      <a href="/admin/dashboard.html">Dashboard</a>
+      <a href="/admin/users.html">Users</a>
+      <a href="/admin/vehicles.html">Vehicles</a>
+      <a href="/admin/transactions.html">Transactions</a>
+      <a href="/admin/stations.html" class="active">Stations</a>
+      <button onclick="logout()">Logout</button>
+    </div>
+  </nav>
+
+  <main class="container">
+    <div class="page-header flex-between">
+      <div>
+        <h1>Fuel Station Management</h1>
+        <p>Add, remove, and view station activity</p>
+      </div>
+      <button class="btn btn-primary" onclick="openModal('addStationModal')">+ Add Station</button>
+    </div>
+
+    <div class="table-wrapper">
+      <div class="table-header">
+        <h3>All Fuel Stations</h3>
+      </div>
+      <div class="table-scroll">
+        <table>
+          <thead>
+            <tr>
+              <th>Station Name</th>
+              <th>Location</th>
+              <th>Status</th>
+              <th>Transactions</th>
+              <th>Total Fuel Issued</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody id="stationsBody">
+            <tr><td colspan="6" class="empty-state"><p>Loading...</p></td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </main>
+
+  <!-- Add Station Modal -->
+  <div class="modal-overlay" id="addStationModal">
+    <div class="modal">
+      <div class="modal-header">
+        <h3>Add Fuel Station</h3>
+        <button class="modal-close" onclick="closeModal('addStationModal')">✕</button>
+      </div>
+      <div class="modal-body">
+        <form id="addStationForm" onsubmit="handleAddStation(event)">
+          <div class="form-group">
+            <label for="stationName">Station Name</label>
+            <input type="text" id="stationName" placeholder="e.g. Highway Fuel Station" required>
+          </div>
+          <div class="form-group">
+            <label for="stationLocation">Location</label>
+            <input type="text" id="stationLocation" placeholder="e.g. Main Street, City">
+          </div>
+          <button type="submit" class="btn btn-primary btn-block" id="addStationBtn">Add Station</button>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <script src="/js/api.js"></script>
+  <script>
+    if (!getToken() || getUser()?.role !== 'admin') location.href = '/admin/login.html';
+    function logout() { clearAuth(); location.href = '/admin/login.html'; }
+
+    async function loadStations() {
+      try {
+        const stations = await apiFetch('/admin/stations');
+        const tbody = document.getElementById('stationsBody');
+        if (stations.length === 0) {
+          tbody.innerHTML = '<tr><td colspan="6" class="empty-state"><p>No stations found</p></td></tr>';
+          return;
+        }
+        tbody.innerHTML = stations.map(s => `
+          <tr>
+            <td><strong>${s.name}</strong></td>
+            <td>${s.location || '-'}</td>
+            <td><span class="badge badge-green">${capitalize(s.status)}</span></td>
+            <td>${s.transaction_count}</td>
+            <td>${s.total_fuel.toFixed(1)}L</td>
+            <td>
+              <button class="btn btn-danger btn-sm" onclick="deleteStation(${s.id})">Remove</button>
+            </td>
+          </tr>
+        `).join('');
+      } catch (err) { showToast(err.message, 'error'); }
+    }
+
+    async function handleAddStation(e) {
+      e.preventDefault();
+      const btn = document.getElementById('addStationBtn');
+      btn.disabled = true;
+      try {
+        await apiFetch('/admin/stations', {
+          method: 'POST',
+          body: JSON.stringify({
+            name: document.getElementById('stationName').value,
+            location: document.getElementById('stationLocation').value
+          })
+        });
+        closeModal('addStationModal');
+        document.getElementById('addStationForm').reset();
+        showToast('Station added!');
+        loadStations();
+      } catch (err) { showToast(err.message, 'error'); }
+      finally { btn.disabled = false; }
+    }
+
+    async function deleteStation(id) {
+      if (!confirm('Remove this fuel station?')) return;
+      try {
+        await apiFetch(`/admin/stations/${id}`, { method: 'DELETE' });
+        showToast('Station removed.');
+        loadStations();
+      } catch (err) { showToast(err.message, 'error'); }
+    }
+
+    loadStations();
+  </script>
+</body>
+</html>

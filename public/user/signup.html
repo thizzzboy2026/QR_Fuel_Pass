@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Sign Up — Fuel QR</title>
+  <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="nav-brand">
+      <a href="/"><span class="brand-badge">Thizzz Boy</span></a>
+    </div>
+    <div class="nav-links">
+      <a href="/">← Back to Portals</a>
+    </div>
+  </nav>
+
+  <main class="auth-page">
+    <div class="auth-card">
+      <h2>Create Account</h2>
+      <p class="auth-subtitle">Sign up to manage your vehicles</p>
+
+      <div id="errorAlert" class="alert alert-error hidden"></div>
+
+      <form id="signupForm" onsubmit="handleSignup(event)">
+        <div class="form-group">
+          <label for="fullName">Full Name</label>
+          <input type="text" id="fullName" placeholder="John Doe" required>
+        </div>
+        <div class="form-group">
+          <label for="email">Email Address</label>
+          <input type="email" id="email" placeholder="you@example.com" required>
+        </div>
+        <div class="form-group">
+          <label for="password">Password</label>
+          <input type="password" id="password" placeholder="Min 6 characters" required minlength="6">
+        </div>
+        <div class="form-group">
+          <label for="confirmPassword">Confirm Password</label>
+          <input type="password" id="confirmPassword" placeholder="Repeat password" required>
+        </div>
+        <button type="submit" class="btn btn-primary btn-block" id="signupBtn">Create Account</button>
+      </form>
+
+      <p class="text-center mt-2" style="color: var(--text-secondary); font-size: 0.9rem;">
+        Already have an account? <a href="/user/login.html">Sign In</a>
+      </p>
+    </div>
+  </main>
+
+  <script src="/js/api.js"></script>
+  <script>
+    if (getToken() && getUser()?.role === 'user') {
+      location.href = '/user/dashboard.html';
+    }
+
+    async function handleSignup(e) {
+      e.preventDefault();
+      const btn = document.getElementById('signupBtn');
+      const errorAlert = document.getElementById('errorAlert');
+      errorAlert.classList.add('hidden');
+
+      const password = document.getElementById('password').value;
+      const confirmPassword = document.getElementById('confirmPassword').value;
+
+      if (password !== confirmPassword) {
+        errorAlert.textContent = 'Passwords do not match.';
+        errorAlert.classList.remove('hidden');
+        return;
+      }
+
+      btn.disabled = true;
+      btn.textContent = 'Creating account...';
+
+      try {
+        const data = await apiFetch('/auth/signup', {
+          method: 'POST',
+          body: JSON.stringify({
+            full_name: document.getElementById('fullName').value,
+            email: document.getElementById('email').value,
+            password: password
+          })
+        });
+        saveAuth(data);
+        location.href = '/user/dashboard.html';
+      } catch (err) {
+        errorAlert.textContent = err.message;
+        errorAlert.classList.remove('hidden');
+        btn.disabled = false;
+        btn.textContent = 'Create Account';
+      }
+    }
+  </script>
+</body>
+</html>

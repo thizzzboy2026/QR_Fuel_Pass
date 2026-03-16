@@ -1,0 +1,260 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Scanner Dashboard — Fuel QR</title>
+  <link rel="stylesheet" href="/css/style.css">
+  <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+</head>
+<body>
+  <nav class="navbar">
+    <div class="nav-brand">
+      <span class="brand-badge">Thizzz Boy</span>
+    </div>
+    <div class="nav-links">
+      <a href="/scanner/dashboard.html" class="active">Scanner</a>
+      <button onclick="logout()">Logout</button>
+    </div>
+  </nav>
+
+  <main class="container">
+    <div class="page-header">
+      <h1>Scanner Dashboard</h1>
+      <p>Scan vehicle QR codes and issue fuel</p>
+    </div>
+
+    <!-- Scan Cards -->
+    <div class="scan-area">
+      <div class="scan-card" id="scanCard" onclick="startScanner()">
+        <div class="scan-icon">📷</div>
+        <h3>+ Scan A Code</h3>
+        <p style="color:var(--text-secondary);font-size:0.85rem;">Click to open camera</p>
+      </div>
+      <div class="scan-card" style="cursor:default;">
+        <div class="scan-icon">✅</div>
+        <h3>Total Scans</h3>
+        <div class="scan-value" id="totalScans">-</div>
+      </div>
+    </div>
+
+    <!-- Scanner Area (hidden until activated) -->
+    <div id="scannerSection" class="hidden">
+      <div class="table-wrapper mb-3" style="padding:24px;">
+        <h3 class="mb-2">Scanning...</h3>
+        <div id="qrReader" class="scanner-reader"></div>
+        <div class="text-center mt-2">
+          <button class="btn btn-secondary btn-sm" onclick="stopScanner()">Stop Scanner</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Vehicle Info (shown after scan) -->
+    <div id="vehicleSection" class="hidden">
+      <div class="vehicle-info">
+        <h3 style="margin-bottom:16px;">Vehicle Information</h3>
+        <div class="vehicle-info-grid">
+          <div class="vehicle-info-item">
+            <div class="label">Vehicle Number</div>
+            <div class="value" id="viNumber">-</div>
+          </div>
+          <div class="vehicle-info-item">
+            <div class="label">Owner Name</div>
+            <div class="value" id="viOwner">-</div>
+          </div>
+          <div class="vehicle-info-item">
+            <div class="label">Fuel Type</div>
+            <div class="value" id="viFuel">-</div>
+          </div>
+          <div class="vehicle-info-item">
+            <div class="label">Remaining Weekly Quota</div>
+            <div class="value" id="viQuota">-</div>
+          </div>
+        </div>
+
+        <div style="margin-top:24px; max-width:400px;">
+          <div id="issueError" class="alert alert-error hidden"></div>
+          <div class="form-group">
+            <label for="fuelAmount">Fuel Amount (Liters)</label>
+            <input type="number" id="fuelAmount" step="0.1" min="0.1" placeholder="Enter liters" required>
+          </div>
+          <div class="form-group">
+            <label for="stationSelect">Fuel Station</label>
+            <select id="stationSelect">
+              <option value="">Select station</option>
+            </select>
+          </div>
+          <div style="display:flex;gap:10px;">
+            <button class="btn btn-success" onclick="issueFuel()" id="issueBtn">Confirm Fuel Issue</button>
+            <button class="btn btn-secondary" onclick="cancelIssue()">Cancel</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Transaction History -->
+    <div class="table-wrapper mt-3">
+      <div class="table-header">
+        <h3>Transactions</h3>
+      </div>
+      <div class="table-scroll">
+        <table>
+          <thead>
+            <tr>
+              <th>Date</th>
+              <th>Vehicle Number</th>
+              <th>Fuel Amount</th>
+              <th>Fuel Station</th>
+              <th>Operator</th>
+            </tr>
+          </thead>
+          <tbody id="txBody">
+            <tr><td colspan="5" class="empty-state"><p>Loading...</p></td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </main>
+
+  <script src="/js/api.js"></script>
+  <script>
+    if (!getToken() || getUser()?.role !== 'operator') {
+      location.href = '/scanner/login.html';
+    }
+
+    function logout() { clearAuth(); location.href = '/scanner/login.html'; }
+
+    let html5QrCode = null;
+    let currentVehicleId = null;
+
+    async function loadScanCount() {
+      try {
+        const data = await apiFetch('/transactions/scan-count');
+        document.getElementById('totalScans').textContent = data.count;
+      } catch (err) { console.error(err); }
+    }
+
+    async function loadTransactions() {
+      try {
+        const txs = await apiFetch('/transactions/scan-history');
+        const tbody = document.getElementById('txBody');
+        if (txs.length === 0) {
+          tbody.innerHTML = '<tr><td colspan="5" class="empty-state"><p>No transactions yet</p></td></tr>';
+          return;
+        }
+        const user = getUser();
+        tbody.innerHTML = txs.map(tx => `
+          <tr>
+            <td>${formatDateTime(tx.created_at)}</td>
+            <td><strong>${tx.vehicle_number}</strong></td>
+            <td>${tx.fuel_amount}L</td>
+            <td>${tx.fuel_station || '-'}</td>
+            <td>${user.full_name}</td>
+          </tr>
+        `).join('');
+      } catch (err) { console.error(err); }
+    }
+
+    function startScanner() {
+      document.getElementById('scannerSection').classList.remove('hidden');
+      document.getElementById('vehicleSection').classList.add('hidden');
+
+      html5QrCode = new Html5Qrcode('qrReader');
+      html5QrCode.start(
+        { facingMode: 'environment' },
+        { fps: 10, qrbox: { width: 250, height: 250 } },
+        onScanSuccess,
+        () => {}
+      ).catch(err => {
+        showToast('Could not access camera. Please ensure camera permissions are granted.', 'error');
+        document.getElementById('scannerSection').classList.add('hidden');
+      });
+    }
+
+    function stopScanner() {
+      if (html5QrCode) {
+        html5QrCode.stop().then(() => {
+          html5QrCode.clear();
+          document.getElementById('scannerSection').classList.add('hidden');
+        }).catch(() => {
+          document.getElementById('scannerSection').classList.add('hidden');
+        });
+      }
+    }
+
+    async function onScanSuccess(decodedText) {
+      stopScanner();
+      try {
+        const qrData = JSON.parse(decodedText);
+        const vehicleId = qrData.vehicleId;
+        const data = await apiFetch(`/transactions/vehicle-lookup/${vehicleId}`);
+        const v = data.vehicle;
+        currentVehicleId = v.id;
+
+        document.getElementById('viNumber').textContent = v.vehicle_number;
+        document.getElementById('viOwner').textContent = v.owner_name;
+        document.getElementById('viFuel').textContent = capitalize(v.fuel_type);
+        document.getElementById('viQuota').textContent = v.remaining_quota + 'L / ' + v.weekly_quota + 'L';
+
+        // Populate stations
+        const select = document.getElementById('stationSelect');
+        select.innerHTML = '<option value="">Select station</option>' +
+          data.stations.map(s => `<option value="${s.id}">${s.name}</option>`).join('');
+
+        document.getElementById('vehicleSection').classList.remove('hidden');
+        document.getElementById('fuelAmount').value = '';
+        document.getElementById('issueError').classList.add('hidden');
+      } catch (err) {
+        showToast('Invalid QR code or vehicle not found: ' + err.message, 'error');
+      }
+    }
+
+    async function issueFuel() {
+      const btn = document.getElementById('issueBtn');
+      const errorDiv = document.getElementById('issueError');
+      errorDiv.classList.add('hidden');
+      const amount = parseFloat(document.getElementById('fuelAmount').value);
+      const stationId = document.getElementById('stationSelect').value;
+
+      if (!amount || amount <= 0) {
+        errorDiv.textContent = 'Please enter a valid fuel amount.';
+        errorDiv.classList.remove('hidden');
+        return;
+      }
+
+      btn.disabled = true;
+      btn.textContent = 'Processing...';
+
+      try {
+        const result = await apiFetch('/transactions/issue', {
+          method: 'POST',
+          body: JSON.stringify({
+            vehicle_id: currentVehicleId,
+            fuel_amount: amount,
+            station_id: stationId || null
+          })
+        });
+        showToast(result.message, 'success');
+        document.getElementById('vehicleSection').classList.add('hidden');
+        currentVehicleId = null;
+        loadScanCount();
+        loadTransactions();
+      } catch (err) {
+        errorDiv.textContent = err.message;
+        errorDiv.classList.remove('hidden');
+      } finally {
+        btn.disabled = false;
+        btn.textContent = 'Confirm Fuel Issue';
+      }
+    }
+
+    function cancelIssue() {
+      document.getElementById('vehicleSection').classList.add('hidden');
+      currentVehicleId = null;
+    }
+
+    loadScanCount();
+    loadTransactions();
+  </script>
+</body>
+</html>

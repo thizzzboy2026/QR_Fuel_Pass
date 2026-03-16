@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Admin Dashboard — Fuel QR</title>
+  <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="nav-brand">
+      <span class="brand-badge">Thizzz Boy</span>
+    </div>
+    <div class="nav-links">
+      <a href="/admin/dashboard.html" class="active">Dashboard</a>
+      <a href="/admin/users.html">Users</a>
+      <a href="/admin/vehicles.html">Vehicles</a>
+      <a href="/admin/transactions.html">Transactions</a>
+      <a href="/admin/stations.html">Stations</a>
+      <button onclick="logout()">Logout</button>
+    </div>
+  </nav>
+
+  <main class="container">
+    <div class="page-header">
+      <h1>Admin Dashboard</h1>
+      <p>System overview and analytics</p>
+    </div>
+
+    <div class="stats-grid">
+      <div class="stat-card">
+        <div class="stat-icon">👤</div>
+        <div class="stat-value" id="statUsers">-</div>
+        <div class="stat-label">Total Users</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-icon">🚗</div>
+        <div class="stat-value" id="statVehicles">-</div>
+        <div class="stat-label">Total Vehicles</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-icon">📊</div>
+        <div class="stat-value" id="statTransactions">-</div>
+        <div class="stat-label">Total Fuel Transactions</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-icon">⛽</div>
+        <div class="stat-value" id="statFuel">-</div>
+        <div class="stat-label">Total Fuel Issued</div>
+      </div>
+    </div>
+
+    <!-- Quick Links -->
+    <div class="stats-grid" style="margin-top:8px;">
+      <a href="/admin/users.html" class="scan-card" style="text-decoration:none;">
+        <div class="scan-icon">👥</div>
+        <h3 style="color:var(--text-primary);">Manage Users</h3>
+      </a>
+      <a href="/admin/vehicles.html" class="scan-card" style="text-decoration:none;">
+        <div class="scan-icon" style="background:rgba(59,130,246,0.12);color:#60a5fa;">🚙</div>
+        <h3 style="color:var(--text-primary);">Manage Vehicles</h3>
+      </a>
+      <a href="/admin/stations.html" class="scan-card" style="text-decoration:none;">
+        <div class="scan-icon" style="background:rgba(245,158,11,0.12);color:#fbbf24;">⛽</div>
+        <h3 style="color:var(--text-primary);">Manage Stations</h3>
+      </a>
+    </div>
+  </main>
+
+  <script src="/js/api.js"></script>
+  <script>
+    if (!getToken() || getUser()?.role !== 'admin') {
+      location.href = '/admin/login.html';
+    }
+
+    function logout() { clearAuth(); location.href = '/admin/login.html'; }
+
+    async function loadStats() {
+      try {
+        const stats = await apiFetch('/admin/dashboard');
+        document.getElementById('statUsers').textContent = stats.totalUsers;
+        document.getElementById('statVehicles').textContent = stats.totalVehicles;
+        document.getElementById('statTransactions').textContent = stats.totalTransactions;
+        document.getElementById('statFuel').textContent = stats.totalFuelIssued.toFixed(1) + 'L';
+      } catch (err) {
+        showToast(err.message, 'error');
+      }
+    }
+
+    loadStats();
+  </script>
+</body>
+</html>

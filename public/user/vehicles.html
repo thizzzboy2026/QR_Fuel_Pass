@@ -1,0 +1,231 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>My Vehicles — Fuel QR</title>
+  <link rel="stylesheet" href="/css/style.css">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+</head>
+<body>
+  <nav class="navbar">
+    <div class="nav-brand">
+      <span class="brand-badge">Thizzz Boy</span>
+    </div>
+    <div class="nav-links">
+      <a href="/user/dashboard.html">Dashboard</a>
+      <a href="/user/vehicles.html" class="active">My Vehicles</a>
+      <button onclick="logout()">Logout</button>
+    </div>
+  </nav>
+
+  <main class="container">
+    <div class="page-header flex-between">
+      <div>
+        <h1>My Vehicles</h1>
+        <p>Manage your registered vehicles and QR codes</p>
+      </div>
+      <button class="btn btn-primary" onclick="openModal('addVehicleModal')">+ Add a Vehicle</button>
+    </div>
+
+    <div class="vehicles-grid" id="vehiclesGrid">
+      <div class="loading-state"><div class="spinner"></div> Loading vehicles...</div>
+    </div>
+  </main>
+
+  <!-- Add Vehicle Modal -->
+  <div class="modal-overlay" id="addVehicleModal">
+    <div class="modal">
+      <div class="modal-header">
+        <h3>Add New Vehicle</h3>
+        <button class="modal-close" onclick="closeModal('addVehicleModal')">✕</button>
+      </div>
+      <div class="modal-body">
+        <div id="addError" class="alert alert-error hidden"></div>
+        <form id="addVehicleForm" onsubmit="handleAddVehicle(event)">
+          <div class="form-group">
+            <label for="vehicleNumber">Vehicle Number</label>
+            <input type="text" id="vehicleNumber" placeholder="e.g. ABC-1234" required>
+          </div>
+          <div class="form-group">
+            <label for="vehicleType">Vehicle Type</label>
+            <select id="vehicleType" required>
+              <option value="">Select type</option>
+              <option value="motorcycle">Motorcycle (4L/week)</option>
+              <option value="car">Car (20L/week)</option>
+              <option value="van">Van (30L/week)</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label for="fuelType">Fuel Type</label>
+            <select id="fuelType" required>
+              <option value="">Select fuel</option>
+              <option value="petrol">Petrol</option>
+              <option value="diesel">Diesel</option>
+            </select>
+          </div>
+          <button type="submit" class="btn btn-primary btn-block" id="addVehicleBtn">Add Vehicle</button>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <!-- QR Code Modal -->
+  <div class="modal-overlay" id="qrModal">
+    <div class="modal">
+      <div class="modal-header">
+        <h3 id="qrModalTitle">QR Code</h3>
+        <button class="modal-close" onclick="closeModal('qrModal')">✕</button>
+      </div>
+      <div class="modal-body">
+        <div class="qr-container">
+          <img id="qrImage" src="" alt="QR Code">
+          <p style="color: var(--text-secondary); font-size: 0.85rem; margin-bottom: 12px;" id="qrVehicleNum"></p>
+          <div class="qr-actions">
+            <button class="btn btn-secondary btn-sm" onclick="downloadQRPng()">📥 Download PNG</button>
+            <button class="btn btn-secondary btn-sm" onclick="downloadQRPdf()">📄 Download PDF</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="/js/api.js"></script>
+  <script>
+    if (!getToken() || getUser()?.role !== 'user') {
+      location.href = '/user/login.html';
+    }
+
+    let currentQR = { dataUrl: '', vehicleNumber: '' };
+
+    function logout() { clearAuth(); location.href = '/user/login.html'; }
+
+    async function loadVehicles() {
+      try {
+        const vehicles = await apiFetch('/vehicles');
+        const grid = document.getElementById('vehiclesGrid');
+
+        if (vehicles.length === 0) {
+          grid.innerHTML = `
+            <div class="empty-state" style="grid-column: 1 / -1;">
+              <div class="icon">🚗</div>
+              <p>No vehicles registered yet. Click "+ Add a Vehicle" to get started.</p>
+            </div>`;
+          return;
+        }
+
+        grid.innerHTML = vehicles.map(v => {
+          const quotaPercent = v.weekly_quota > 0 ? (v.remaining_quota / v.weekly_quota * 100) : 0;
+          const quotaColor = quotaPercent > 50 ? 'var(--success)' : quotaPercent > 20 ? 'var(--warning)' : 'var(--error)';
+          return `
+            <div class="vehicle-card">
+              <div class="vehicle-card-header">
+                <h4>${v.vehicle_number}</h4>
+                <span class="badge badge-blue">${capitalize(v.vehicle_type)}</span>
+              </div>
+              <div class="vehicle-card-meta">
+                <div class="meta-item">
+                  <div class="meta-label">Fuel Type</div>
+                  <div class="meta-value">${capitalize(v.fuel_type)}</div>
+                </div>
+                <div class="meta-item">
+                  <div class="meta-label">Weekly Quota</div>
+                  <div class="meta-value">${v.weekly_quota}L</div>
+                </div>
+              </div>
+              <div style="font-size:0.8rem;color:var(--text-secondary);margin-bottom:4px;">
+                Remaining: <strong style="color:${quotaColor}">${v.remaining_quota}L</strong> / ${v.weekly_quota}L
+              </div>
+              <div class="quota-bar">
+                <div class="quota-bar-fill" style="width:${quotaPercent}%; background: ${quotaColor};"></div>
+              </div>
+              <div class="vehicle-card-actions">
+                <button class="btn btn-outline btn-sm" onclick="viewQR(${v.id}, '${v.vehicle_number}')">🔲 QR Code</button>
+                <button class="btn btn-danger btn-sm" onclick="deleteVehicle(${v.id})">🗑 Remove</button>
+              </div>
+            </div>`;
+        }).join('');
+      } catch (err) {
+        showToast(err.message, 'error');
+      }
+    }
+
+    async function handleAddVehicle(e) {
+      e.preventDefault();
+      const btn = document.getElementById('addVehicleBtn');
+      const errorDiv = document.getElementById('addError');
+      errorDiv.classList.add('hidden');
+      btn.disabled = true;
+      btn.textContent = 'Adding...';
+
+      try {
+        await apiFetch('/vehicles', {
+          method: 'POST',
+          body: JSON.stringify({
+            vehicle_number: document.getElementById('vehicleNumber').value,
+            vehicle_type: document.getElementById('vehicleType').value,
+            fuel_type: document.getElementById('fuelType').value
+          })
+        });
+        closeModal('addVehicleModal');
+        document.getElementById('addVehicleForm').reset();
+        showToast('Vehicle added successfully!');
+        loadVehicles();
+      } catch (err) {
+        errorDiv.textContent = err.message;
+        errorDiv.classList.remove('hidden');
+      } finally {
+        btn.disabled = false;
+        btn.textContent = 'Add Vehicle';
+      }
+    }
+
+    async function viewQR(vehicleId, vehicleNumber) {
+      try {
+        const data = await apiFetch(`/vehicles/${vehicleId}/qr`);
+        currentQR = { dataUrl: data.qr_code, vehicleNumber: data.vehicle_number };
+        document.getElementById('qrImage').src = data.qr_code;
+        document.getElementById('qrModalTitle').textContent = `QR Code — ${data.vehicle_number}`;
+        document.getElementById('qrVehicleNum').textContent = `Vehicle: ${data.vehicle_number}`;
+        openModal('qrModal');
+      } catch (err) {
+        showToast(err.message, 'error');
+      }
+    }
+
+    function downloadQRPng() {
+      const link = document.createElement('a');
+      link.download = `QR_${currentQR.vehicleNumber}.png`;
+      link.href = currentQR.dataUrl;
+      link.click();
+    }
+
+    function downloadQRPdf() {
+      const { jsPDF } = window.jspdf;
+      const doc = new jsPDF();
+      doc.setFontSize(18);
+      doc.text('Fuel QR Code', 105, 25, { align: 'center' });
+      doc.setFontSize(12);
+      doc.text(`Vehicle: ${currentQR.vehicleNumber}`, 105, 35, { align: 'center' });
+      doc.addImage(currentQR.dataUrl, 'PNG', 55, 50, 100, 100);
+      doc.setFontSize(9);
+      doc.setTextColor(128);
+      doc.text('Generated by Fuel QR Management System', 105, 165, { align: 'center' });
+      doc.save(`QR_${currentQR.vehicleNumber}.pdf`);
+    }
+
+    async function deleteVehicle(id) {
+      if (!confirm('Are you sure? This will also delete all transactions for this vehicle.')) return;
+      try {
+        await apiFetch(`/vehicles/${id}`, { method: 'DELETE' });
+        showToast('Vehicle removed.');
+        loadVehicles();
+      } catch (err) {
+        showToast(err.message, 'error');
+      }
+    }
+
+    loadVehicles();
+  </script>
+</body>
+</html>

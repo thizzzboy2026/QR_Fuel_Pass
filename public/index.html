@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Fuel QR Management System</title>
+  <meta name="description" content="Modern Fuel QR Code Management System — Manage vehicles, track fuel quotas, and issue fuel with QR codes.">
+  <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="nav-brand">
+      <span class="brand-badge">Thizzz Boy</span>
+    </div>
+    <div class="nav-links"></div>
+  </nav>
+
+  <main class="portal-page">
+    <h1>Fuel QR Management</h1>
+    <p class="subtitle">Select your portal to get started</p>
+
+    <div class="portal-cards">
+      <div class="portal-card" onclick="location.href='/user/login.html'" id="portal-user">
+        <div class="icon">👤</div>
+        <h3>User Portal</h3>
+        <p>Manage your vehicles, view fuel quotas, and access your QR codes</p>
+      </div>
+
+      <div class="portal-card" onclick="location.href='/scanner/login.html'" id="portal-scanner">
+        <div class="icon">📷</div>
+        <h3>QR Scanning Portal</h3>
+        <p>Scan vehicle QR codes and issue fuel at your station</p>
+      </div>
+
+      <div class="portal-card" onclick="location.href='/admin/login.html'" id="portal-admin">
+        <div class="icon">⚙️</div>
+        <h3>Admin Portal</h3>
+        <p>Manage users, vehicles, stations, and view system analytics</p>
+      </div>
+    </div>
+  </main>
+</body>
+</html>

@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>User Management — Admin — Fuel QR</title>
+  <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="nav-brand">
+      <span class="brand-badge">Thizzz Boy</span>
+    </div>
+    <div class="nav-links">
+      <a href="/admin/dashboard.html">Dashboard</a>
+      <a href="/admin/users.html" class="active">Users</a>
+      <a href="/admin/vehicles.html">Vehicles</a>
+      <a href="/admin/transactions.html">Transactions</a>
+      <a href="/admin/stations.html">Stations</a>
+      <button onclick="logout()">Logout</button>
+    </div>
+  </nav>
+
+  <main class="container">
+    <div class="page-header">
+      <h1>User Management</h1>
+      <p>View and manage all registered users</p>
+    </div>
+
+    <div class="table-wrapper">
+      <div class="table-header">
+        <h3>All Users</h3>
+      </div>
+      <div class="table-scroll">
+        <table>
+          <thead>
+            <tr>
+              <th>Name</th>
+              <th>Email</th>
+              <th>Role</th>
+              <th>Status</th>
+              <th>Joined</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody id="usersBody">
+            <tr><td colspan="6" class="empty-state"><p>Loading...</p></td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </main>
+
+  <script src="/js/api.js"></script>
+  <script>
+    if (!getToken() || getUser()?.role !== 'admin') location.href = '/admin/login.html';
+    function logout() { clearAuth(); location.href = '/admin/login.html'; }
+
+    async function loadUsers() {
+      try {
+        const users = await apiFetch('/admin/users');
+        const tbody = document.getElementById('usersBody');
+        if (users.length === 0) {
+          tbody.innerHTML = '<tr><td colspan="6" class="empty-state"><p>No users found</p></td></tr>';
+          return;
+        }
+        tbody.innerHTML = users.map(u => {
+          const statusBadge = u.status === 'active'
+            ? '<span class="badge badge-green">Active</span>'
+            : '<span class="badge badge-red">Disabled</span>';
+          const roleBadge = u.role === 'admin' ? 'badge-blue' : u.role === 'operator' ? 'badge-yellow' : 'badge-gray';
+          return `
+            <tr>
+              <td><strong>${u.full_name}</strong></td>
+              <td>${u.email}</td>
+              <td><span class="badge ${roleBadge}">${capitalize(u.role)}</span></td>
+              <td>${statusBadge}</td>
+              <td>${formatDate(u.created_at)}</td>
+              <td>
+                ${u.role !== 'admin' ? `
+                  <button class="btn btn-sm ${u.status === 'active' ? 'btn-secondary' : 'btn-success'}"
+                    onclick="toggleStatus(${u.id}, '${u.status === 'active' ? 'disabled' : 'active'}')">
+                    ${u.status === 'active' ? 'Disable' : 'Enable'}
+                  </button>
+                  <button class="btn btn-danger btn-sm" onclick="deleteUser(${u.id})">Remove</button>
+                ` : '<span style="color:var(--text-muted);font-size:0.8rem;">Protected</span>'}
+              </td>
+            </tr>`;
+        }).join('');
+      } catch (err) { showToast(err.message, 'error'); }
+    }
+
+    async function toggleStatus(id, status) {
+      try {
+        await apiFetch(`/admin/users/${id}/status`, {
+          method: 'PATCH',
+          body: JSON.stringify({ status })
+        });
+        showToast(`User ${status === 'active' ? 'enabled' : 'disabled'}.`);
+        loadUsers();
+      } catch (err) { showToast(err.message, 'error'); }
+    }
+
+    async function deleteUser(id) {
+      if (!confirm('Delete this user and all their vehicles/transactions?')) return;
+      try {
+        await apiFetch(`/admin/users/${id}`, { method: 'DELETE' });
+        showToast('User removed.');
+        loadUsers();
+      } catch (err) { showToast(err.message, 'error'); }
+    }
+
+    loadUsers();
+  </script>
+</body>
+</html>

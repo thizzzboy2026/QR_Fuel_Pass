@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Dashboard — Fuel QR</title>
+  <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="nav-brand">
+      <span class="brand-badge">Thizzz Boy</span>
+    </div>
+    <div class="nav-links">
+      <a href="/user/dashboard.html" class="active">Dashboard</a>
+      <a href="/user/vehicles.html">My Vehicles</a>
+      <button onclick="logout()">Logout</button>
+    </div>
+  </nav>
+
+  <main class="container">
+    <div class="page-header flex-between">
+      <div>
+        <h1 id="greeting">Dashboard</h1>
+        <p>Overview of your fuel management</p>
+      </div>
+      <a href="/user/vehicles.html" class="btn btn-primary">+ Add a Vehicle</a>
+    </div>
+
+    <!-- Stats -->
+    <div class="stats-grid" id="statsGrid">
+      <div class="stat-card">
+        <div class="stat-icon">🚗</div>
+        <div class="stat-value" id="statVehicles">-</div>
+        <div class="stat-label">Total Vehicles</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-icon">⛽</div>
+        <div class="stat-value" id="statQuota">-</div>
+        <div class="stat-label">Your Weekly Fuel Quota</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-icon">📊</div>
+        <div class="stat-value" id="statFillings">-</div>
+        <div class="stat-label">Total Fuel Fillings</div>
+      </div>
+    </div>
+
+    <!-- Transactions Table -->
+    <div class="table-wrapper">
+      <div class="table-header">
+        <h3>Fuel Fillings</h3>
+      </div>
+      <div class="table-scroll">
+        <table>
+          <thead>
+            <tr>
+              <th>Date</th>
+              <th>Vehicle Number</th>
+              <th>Fuel Type</th>
+              <th>Fuel Amount</th>
+              <th>Fuel Station</th>
+            </tr>
+          </thead>
+          <tbody id="transactionsBody">
+            <tr><td colspan="5" class="empty-state"><div class="icon">📋</div><p>Loading transactions...</p></td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </main>
+
+  <script src="/js/api.js"></script>
+  <script>
+    // Auth guard
+    if (!getToken() || getUser()?.role !== 'user') {
+      location.href = '/user/login.html';
+    }
+
+    const user = getUser();
+    document.getElementById('greeting').textContent = `Welcome, ${user.full_name}`;
+
+    function logout() {
+      clearAuth();
+      location.href = '/user/login.html';
+    }
+
+    async function loadDashboard() {
+      try {
+        const stats = await apiFetch('/users/dashboard');
+        document.getElementById('statVehicles').textContent = stats.totalVehicles;
+        document.getElementById('statQuota').textContent = stats.weeklyQuota + 'L';
+        document.getElementById('statFillings').textContent = stats.totalFillings;
+      } catch (err) {
+        showToast(err.message, 'error');
+      }
+    }
+
+    async function loadTransactions() {
+      try {
+        const transactions = await apiFetch('/transactions');
+        const tbody = document.getElementById('transactionsBody');
+
+        if (transactions.length === 0) {
+          tbody.innerHTML = '<tr><td colspan="5" class="empty-state"><div class="icon">📋</div><p>No fuel transactions yet</p></td></tr>';
+          return;
+        }
+
+        tbody.innerHTML = transactions.map(tx => `
+          <tr>
+            <td>${formatDateTime(tx.created_at)}</td>
+            <td><strong>${tx.vehicle_number}</strong></td>
+            <td><span class="badge badge-blue">${capitalize(tx.fuel_type)}</span></td>
+            <td>${tx.fuel_amount}L</td>
+            <td>${tx.fuel_station || '-'}</td>
+          </tr>
+        `).join('');
+      } catch (err) {
+        showToast(err.message, 'error');
+      }
+    }
+
+    loadDashboard();
+    loadTransactions();
+  </script>
+</body>
+</html>
